@@ -18,3 +18,19 @@ HR-Churn.R - a). this is the analysis of the hr module from data directory where
              h). I make a visual of the model using a ROC curve, Receiver Operating Characteristic, and an AUC,                   Area Under Curve, to visualise the performance on a plot.
 
 figs - These are the visual representations of my model.
+
+###########################################################
+
+data - this is the raw data for the analysis of this HR churn project.
+
+figs - These are the visual figures of my analysis.
+
+HR-Churn.R - codes for the logit distribution.
+
+HR-DecTree.R - codes for the decision tree algorithm.
+
+hr-Randomforest.R - codes for the random forest algorithm.
+
+hr-report.Rmd - Rmarkdown text file for html document.
+
+############################################################
