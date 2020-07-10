@@ -1,0 +1,306 @@
+---
+output:
+  pdf_document: default
+  html_document: default
+---
+## HR report on Worker Churn
+### A Regression Analysis
+#### by Leonard Langat Maina
+
+## PART ONE:
+
+## ABSTRACT
+
+This is a report of the Human Resource key performance indicators that I will use to measure the performance of an organization. The objective of the report is to build machine learning algorithms to predict with a certain degree of accuracy whilst maintaining the robustness of the model, hence checking for the model parameters; sensitivity and specificity. The original data is obtained from the [Predictive Analytics Lab Website](https://app.predictiveanalytics.co.ke/#/data/all).
+
+Importing data into RStudio
+
+```{r}
+hr<-read.csv("data/hr_comma_sep.csv",stringsAsFactors = F,na.strings = c("","NA",""))
+```
+
+## ANALYSIS OF THE DATA
+####  _Data conversion_
+
+First I convert data types variables; left, department and salary into factors, view the structure of my data. Left variable will be my dependent variable in my linear equation with which I predict over the other independent variable. The churn problem is of a classification type. (Supervised Learning) 
+
+```{r}
+hr$department=as.factor(hr$department)
+hr$salary=as.factor(hr$salary)
+hr$left=as.factor(hr$left)
+str(hr)
+```
+
+Then I generate a frequency table to show the distribution of the data and create a visual by generating a mosaic plot of the distribution of department and their salary.
+
+```{r}
+ftable<-table(hr$department,hr$salary)
+ftable
+mosaicplot(ftable,main="Distribution of Departments by their Salary",color=TRUE)
+```
+
+Now I perform a chi-square test to understand my hypothesis of whether departments and salary are dependent, in statistical theory; a p-value < 0.5 shows dependance, I surmise that my initial hypothesis stands. 
+
+```{r}
+chisq.test(ftable)
+```
+
+To predict churn in the organisation I perform a logistic regression, a linear expression of the left variable modeled on top of the existing observations through an in sample error distribution and I seek to improve my model with an out of sample error distribution, data that my algorithm will be passed through for deployment on real life scenarios and unseen data to merit the robustness of my model. 
+
+This is a classification problem because its either of the two outcomes; left denoted by 0 and stayed denoted by 1. The family of distribution I will employ in my analysis is from the binomial distribution.
+
+**_In-sample distibution_**
+
+```{r}
+## in-sample distribution
+logit_model<-glm(left~satisfaction_level+last_evaluation+number_project+
+                 Work_accident+promotion_last_5years+average_montly_hours+
+                   time_spend_company,data = hr, family = "binomial")
+#summary(logit_model)
+
+##predict churn
+hr$left_pred<-predict(logit_model,data=hr,type="response")
+
+##changing the probabilities into class (0 or 1)
+hr$left_pred<-ifelse(hr$left_pred>0.5,1,0)
+hr$left_pred=as.factor(hr$left_pred)
+#str(hr)
+```
+
+```{r}
+#confusion matrix
+table(hr$left,hr$left_pred)
+misClassError<-mean(hr$left_pred!=hr$left)
+print(paste('Accuracy=',1-misClassError))
+```
+
+My prediction from doing an in-sample error is `r paste('Accuracy=',1-misClassError)`. With this accuracy, I will perform an out of sample error estimate to check the accuracy the algorithm whilst maintaining the sensitivity and specificity, the model parameter that show if my model is best accurate and robust. A perfect model is not only accurate(overfitted) in its prediction but is also robust. 
+
+ **_Out of sample distribution_**
+
+This is where I split my data into training set and test set, the idea is to train my data using the training set and making my predicts with the unseen data that my algorithm is unfamiliar with to see how robust my model is for deployment to the real life scenario.
+
+```{r ,message=FALSE}
+#Splitting the data in train and test data
+#install.packages('caTools')
+library(caTools)
+set.seed(123)
+split<-sample.split(hr,SplitRatio=0.75)
+split
+
+train<-subset(hr,split=="TRUE")
+test<-subset(hr,split=="FALSE")
+str(train)
+str(test)
+```
+
+I train my data using the training dataset with a generalized linear model(glm) function and thereafter making my predictions on the test data based on the trained dataset.
+
+```{r}
+##Train model using glm function
+
+logit_model_tr<-glm(left~satisfaction_level+last_evaluation+number_project+
+                 Work_accident+promotion_last_5years+average_montly_hours+
+                   time_spend_company,data = train, family = "binomial")
+#logit_model_tr
+
+##Predicting test data based on trained model
+
+predicted.result<-predict(logit_model_tr,test,type = "response")
+predicted.result<-ifelse(predicted.result>0.5,1,0)
+
+##Evaluating model accuracy using confusion matrix
+#table(test$left,predicted.result)
+misClassError<-mean(predicted.result!=test$left)
+#print(paste('Accuracy=',1-misClassError))
+```
+
+## MODEL EVALUATION
+
+Evaluating my model using a confusion Matrix.
+
+```{r ,message=FALSE}
+library(caret)
+confusionMatrix(table(test$left,predicted.result))
+```
+
+ **_ROC-AUC CURVE_**
+ 
+A visual representation of the model using a Receiver Operating Characteristic (ROC) curve and Area under Curve (AUC) label that displays the actual of the area in the curve.  
+N/B: Best models have auc values closer to 1.
+
+```{r ,echo=FALSE ,message=FALSE}
+#ROC-AUC CURVE
+library(ROCR)
+ROCRpred<-prediction(predicted.result,test$left)
+ROCRperf<-performance(ROCRpred,measure="tpr",x.measure="fpr")
+#plot(ROCRperf)
+#plot(ROCRperf,colorize=TRUE)
+#plot(ROCRperf,colorize=TRUE,print.cutoffs.at=seq(0.1,by=0.1))
+plot(ROCRperf,colorize=TRUE,print.cutoffs.at=seq(0.1,by=0.1),main = "ROC CURVE")
+abline(a=0,b=1)
+#ggsave("figs/ROC-CURVEplot.png")
+
+auc<-performance(ROCRpred,measure="auc")
+auc<-auc@y.values[[1]]
+#auc
+auc<-round(auc,4)
+legend(.5,.4,auc,title="AUC",cex=1)
+#ggsave("figs/AUCplot.png")
+```
+
+
+## PART TWO:
+## DECISION TREE
+
+In my analysis I use this algorithm for illustrative purpose to help us understand Random forest, an algorithm based on decision trees. A random forest is an agglomerative process whereby you generate many decision trees based on various decision nodes to solve a classification problem. 
+
+Loading my data into RStudio
+
+```{r ,include=FALSE}
+hr<-read.csv("data/hr_comma_sep.csv")
+hr$left=as.factor(hr$left)
+#unlist(lapply(hr,class))
+```
+
+### _Step 1: Splitting the data into train and test_
+```{r ,message=FALSE}
+library(caTools)
+set.seed(1234)
+split<-sample.split(hr,SplitRatio = 0.75)
+split
+
+train<-subset(hr,split=="TRUE")
+test<-subset(hr,split=="FALSE")
+#str(train)
+#str(test)
+```
+
+### _Step 2: Training model with logistics regression using glm function_
+ **A plot of the decision tree**
+ 
+```{r ,message=FALSE}
+library("rpart") ##recursive partioning
+library("rpart.plot")
+DecTreeModel<-rpart(left~.,data=train,method = "class")
+rpart.plot(DecTreeModel)
+```
+
+
+The decision tree is constructed in a top-down manner and involves the following process:  
+  1. Placing all the trained examples at the root  
+  2. Categorizing the attributes  
+  3. Partition the examples recursively based on the selected attributes  
+  4. Select test attributes on the basis of a heuristic or statistical measure
+
+```{r}
+#summary(DecTreeModel)
+```
+
+The idea here is to allow the decision tree to grow fully and observe the CP value.
+The complexity parameter (CP) is used to control the size of the decision tree and to select the optimal tree size. If the cost of adding another variable to the decision tree from the current node is above the value of cp, then tree building does not continue.
+
+```{r}
+printcp(DecTreeModel)
+plotcp(DecTreeModel)
+```
+
+The printcp() and plotcp() functions provide the cross-validation error for each nsplit and can be used to prune the tree.
+The one with the least cross-validation error (xerror) is the optimal value of CP given by the printcp() funtion
+
+### _Step 3: Predicting test based on trained model_
+
+```{r}
+test$left_Pred<-predict(DecTreeModel,newdata = test,type = "class")
+```
+
+### _Step 4: Evaluating model accuracy using confusion matrix_
+
+```{r ,message=FALSE}
+table(test$left,test$left_Pred)
+library(caret)
+confusionMatrix(table(test$left,test$left_Pred))
+```
+
+### Tree pruning
+**I find the value of CP for which the cross validation error is minimum**
+
+```{r}
+min(DecTreeModel$cptable[,"xerror"])
+which.min(DecTreeModel$cptable[,"xerror"])
+cpmin<-DecTreeModel$cptable[8,"CP"]
+cpmin
+```
+
+From my analysis I can say the decision tree is optimal and homogeneous and doesn't need further pruning.
+
+## PART THREE:
+## RANDOM FOREST
+
+Random forest is the most prefered and mostly used algorithm in data science projects for best results. It is an ensemble of decision trees that builds and combines multiple decision trees to gives a more accurate prediction. Each decision tree model is weak when epmloyed on its own, but it becomes stable when put together.  
+It is random because it operates by choosing predictors randomly at the time of training the model.  
+It is called a forest because it takes the output of multiple decision trees to make a decision.
+
+After loading my data unto Rstudio, my next step will be spliting data.
+
+### _Step 1: Split data into train and test data_
+
+```{r}
+library(caTools)
+set.seed(123) 
+
+split <- sample.split(hr, SplitRatio = 0.75)
+#split
+
+training_set = subset(hr, split == TRUE)
+test_set = subset(hr, split == FALSE)
+```
+
+### _Step 2: Fitting Random Forest Classifier into the Training set_
+
+```{r ,message=FALSE}
+# install.packages('randomForest')
+library(randomForest)
+classifier <- randomForest(x = training_set[-7],
+                           y = training_set$left,
+                           ntree = 500)
+#bestmtry<-tuneRF(training_set,training_set$left,stepFactor = 1.2,improve = 0.01,trace = T,plot = T)
+```
+
+I am running my classifier using a random forest function, the ntree is an arbitrary number of trees to help me determine later if my model still needs optimization or has stabilized.
+
+### _Step 3: Predicting test set data using training set_
+
+```{r}
+y_pred = predict(classifier, newdata = test_set[-7])
+#y_pred
+```
+
+### _Step 4: Model Evaluation by checking accuracy using a confusion matrix_
+
+```{r ,message=FALSE}
+cm <- table(test_set$left,y_pred)
+misClassError<-mean(test_set$left!=y_pred)
+#print(paste('Accuracy=',1-misClassError))
+library(caret)
+confusionMatrix(cm)
+```
+
+The information I gather from the confusion matrix is; a high degree of accuracy and a general high score in sensitivity and specificity, which is indeed a good model. Doing a quick comparison with decision tree model you realise that there is an improvement with this Random Forest model.
+
+```{r}
+plot(classifier)
+```
+
+The above plot on the classifier illustrate the number of trees that best optimise the model. By growing the trees more and more you understand from the figure if my error decreases or not. If it were still decreasing I would probably go and change, ntree, from my classifier to accomadate this calculation. It is not decreasing further infact it decreased until at some point in 30 trees and there was no improvements by growing more trees.
+
+```{r}
+importance(classifier)
+varImpPlot(classifier)
+```
+
+## CONCLUSION
+
+The best thing about Random Forest, it has an inbuilt variable importance function, varImpPlot. In earlier models we used to check on p-value but in Random Forest, it is a diagnostic tool to explain the **_WHY_** in a problem statement. The most important variable in the analysis is displayed in the plot sequentially to explain the significance of each individual attribute.
+
+By looking at the plot you understand why this happened. For instance, why is the organization is experiencing staff turnover; you realise that the satisfaction level plays a major role in this churning process. Time spend in the company by the individual, the number of projects handled by the staff member, and the average monthly hours put in by the employees comes after respectively. Salary comes a distant 7^th^ in the list.
